@@ -33,9 +33,11 @@ def runit(url):
     return None
 
 if __name__ == '__main__':
-    pool = Pool(processes=4)
+    import sys
+    count = int(sys.argv[1])
+    pool = Pool(processes=count)
     args = 'http://dedupe.datamade.us'
     args_map = []
-    for i in range(4):
+    for i in range(count):
         args_map.append(args)
-    print pool.map(runit, args_map)
+    pool.map(runit, args_map)
