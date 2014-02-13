@@ -1,3 +1,1 @@
-pyvirtualdisplay
-selenium
-python-wd-parallel
+requests
