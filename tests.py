@@ -1,36 +1,41 @@
-import unittest
-from selenium import webdriver
-from multiprocessing import Pool
 import os
-from pyvirtualdisplay import Display
-
-display = Display(visible=0, size=(1024, 768))
-display.start()
+import time
+import requests
+from multiprocessing import Pool
 
 def runit(url):
-    browser = webdriver.Firefox()
-    browser.get(url)
- 
-    upload_input = browser.find_element_by_id('input_file')
-    file_path = os.path.join(
-        os.getcwd(), 
-        'csv_example_messy_input.csv'
-    )
-    upload_input.send_keys(file_path)
-    submit_button = browser.find_element_by_id('submit-upload')
-    submit_button.click()
- 
-    for field in ['Source', 'Site name', 'Zip', 'Address']:
-        browser.find_element_by_name(field).click()
-    browser.find_element_by_id('start-training').click()
-
-    for i in range(10):
-        browser.find_element_by_id('yes').click()
-        browser.find_element_by_id('no').click()
-    browser.find_element_by_id('finish').click()
+    s = requests.Session()
+    f = {'input_file': open('csv_example_messy_input.csv', 'rb')}
+    r = s.post(url, files=f)
+    fields = {'Site name': 'on', 'Phone': 'on', 'Address': 'on', 'Zip': 'on'}
+    start = time.time()
+    select = s.post('%s/select_fields/' % url, data=fields)
+    end = time.time()
+    print 'Select fields took %s seconds' % (str(end - start))
+    for i in range(12):
+        s.get('%s/mark-pair/' % url, params={'action': 'yes'})
+        s.get('%s/get-pair/' % url)
+        time.sleep(2)
+    for i in range(12):
+        s.get('%s/mark-pair/' % url, params={'action': 'no'})
+        s.get('%s/get-pair/' % url)
+        time.sleep(2)
+    s.get('%s/mark-pair/' % url, params={'action': 'finish'})
+    start = time.time()
+    while True:
+        if s.get('%s/working/' % url).json().get('ready'):
+            end = time.time()
+            break
+        else:
+            time.sleep(3)
+            continue
+    print 'Dedupe Took %s seconds' % (str(end - start))
+    return None
 
 if __name__ == '__main__':
-    pool = Pool(processes=10)
-    for i in range(10):
-        res = pool.apply_async(runit, ['http://dedupe.datamade.us'])
-        print res.get()
+    pool = Pool(processes=4)
+    args = 'http://dedupe.datamade.us'
+    args_map = []
+    for i in range(4):
+        args_map.append(args)
+    print pool.map(runit, args_map)
