@@ -12,13 +12,19 @@ def runit(url):
     select = s.post('%s/select_fields/' % url, data=fields)
     end = time.time()
     print 'Select fields took %s seconds' % (str(end - start))
+    yes = 0
+    no = 0
     for i in range(12):
         s.get('%s/mark-pair/' % url, params={'action': 'yes'})
         s.get('%s/get-pair/' % url)
+        yes += 1
+        print 'Training: %s yes %s no' % (yes, no)
         time.sleep(2)
     for i in range(12):
         s.get('%s/mark-pair/' % url, params={'action': 'no'})
         s.get('%s/get-pair/' % url)
+        no += 1
+        print 'Training: %s yes %s no' % (yes, no)
         time.sleep(2)
     s.get('%s/mark-pair/' % url, params={'action': 'finish'})
     start = time.time()
