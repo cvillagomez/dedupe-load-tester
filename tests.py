@@ -13,9 +13,8 @@ def runit(url):
     print 'Select fields took %s seconds' % (str(end - start))
     yes = 0
     no = 0
-    timeout = 15
+    timeout = 30
     resp = s.get('%s/get-pair/' % url)
-    print resp
     for i in range(12):
         try:
             s.get('%s/mark-pair/' % url, params={'action': 'yes'}, timeout=timeout)
