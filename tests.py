@@ -2,7 +2,7 @@ import requests
 from multiprocessing import Pool
 import time
 
-def runit(url):
+def full_run(url):
     s = requests.Session()
     f = {'input_file': open('csv_example_messy_input.csv', 'rb')}
     r = s.post(url, files=f)
@@ -13,7 +13,7 @@ def runit(url):
     print 'Select fields took %s seconds' % (str(end - start))
     yes = 0
     no = 0
-    timeout = 30
+    timeout = 60
     resp = s.get('%s/get-pair/' % url)
     for i in range(12):
         try:
@@ -41,7 +41,9 @@ def runit(url):
         return 'Training finish failed'
     try:
         while True:
-            if s.get('%s/working/' % url, timeout=timeout).json().get('ready'):
+            work = s.get('%s/working/' % url, timeout=timeout)
+            if work.json().get('ready'):
+                print work.json()
                 end = time.time()
                 break
             else:
@@ -52,6 +54,31 @@ def runit(url):
     print 'Dedupe Took %s seconds' % (str(end - start))
     return None
 
+def trained_run(url):
+    s = requests.Session()
+    f = {'input_file': open('csv_example_messy_input.csv', 'rb')}
+    r = s.post(url, files=f)
+    fields = {'Site name': 'on', 'Phone': 'on', 'Address': 'on', 'Zip': 'on'}
+    start = time.time()
+    select = s.post('%s/select_fields/' % url, data=fields)
+    end = time.time()
+    print 'Select fields took %s seconds' % (str(end - start))
+    f = {'training_data': open('csv_example_training.json', 'rb')}
+    r = s.post('%s/trained_dedupe/' % url, files=f)
+    s.get('%s/mark-pair/' % url, params={'action': 'finish'})
+    start = time.time()
+    print 'Deduplication started...'
+    while True:
+        work = s.get('%s/working/' % url)
+        if work.json().get('ready'):
+            print work.json()
+            end = time.time()
+            break
+        else:
+            time.sleep(3)
+            continue
+    print 'Dedupe Took %s seconds' % (str(end - start))
+
 if __name__ == '__main__':
     import sys
     count = int(sys.argv[1])
@@ -60,4 +87,7 @@ if __name__ == '__main__':
     args_map = []
     for i in range(count):
         args_map.append(args)
-    print pool.map(runit, args_map)
+    if sys.argv[2] == 'full': 
+        print pool.map(full_run, args_map)
+    elif sys.argv[2] == 'trained':
+        print pool.map(trained_run, args_map)
