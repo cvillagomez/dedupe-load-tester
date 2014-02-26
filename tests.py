@@ -13,7 +13,7 @@ def full_run(url):
     print 'Select fields took %s seconds' % (str(end - start))
     yes = 0
     no = 0
-    timeout = 60
+    timeout = 120
     resp = s.get('%s/get-pair/' % url)
     for i in range(12):
         try:
@@ -43,7 +43,6 @@ def full_run(url):
         while True:
             work = s.get('%s/working/' % url, timeout=timeout)
             if work.json().get('ready'):
-                print work.json()
                 end = time.time()
                 break
             else:
@@ -52,7 +51,7 @@ def full_run(url):
     except requests.exceptions.Timeout:
         return 'Failed while waiting for results'
     print 'Dedupe Took %s seconds' % (str(end - start))
-    return None
+    return work.json()['result']
 
 def trained_run(url):
     s = requests.Session()
@@ -83,7 +82,7 @@ if __name__ == '__main__':
     import sys
     count = int(sys.argv[1])
     pool = Pool(processes=count)
-    args = 'http://127.0.0.1:9999'
+    args = 'http://dedupe.datamade.us'
     args_map = []
     for i in range(count):
         args_map.append(args)
