@@ -1,10 +1,28 @@
 import requests
+from requests.exceptions import Timeout, ConnectionError
 from multiprocessing import Pool
 import time
+import csv
+from cStringIO import StringIO
 
-def full_run(url):
+def stack(fname, pile_size):
+    with open(fname, 'rb') as guts:
+        reader = csv.reader(guts)
+        stuff = list(reader)
+    body = []
+    for thing in range(pile_size):
+        body.extend(stuff)
+    pile = StringIO()
+    writer = csv.writer(pile)
+    writer.writerows(body)
+    pile.seek(0)
+    return pile
+
+def full_run(args):
+    url, pile_size = args
     s = requests.Session()
-    f = {'input_file': open('csv_example_messy_input.csv', 'rb')}
+    pile = stack('csv_example_messy_input.csv', pile_size)
+    f = {'input_file': ('test.csv', pile.getvalue())}
     r = s.post(url, files=f)
     fields = {'Site name': 'on', 'Phone': 'on', 'Address': 'on', 'Zip': 'on'}
     start = time.time()
@@ -22,7 +40,7 @@ def full_run(url):
             yes += 1
             print 'Training: %s yes %s no' % (yes, no)
             time.sleep(2)
-        except requests.exceptions.Timeout:
+        except (Timeout, ConnectionError):
             return 'Marking pair #%s failed' % yes
     for i in range(12):
         try:
@@ -31,29 +49,38 @@ def full_run(url):
             no += 1
             print 'Training: %s yes %s no' % (yes, no)
             time.sleep(2)
-        except requests.exceptions.Timeout:
+        except (Timeout, ConnectionError):
             return 'Marking pair #%s failed' % (yes + no)
     try:
         s.get('%s/mark-pair/' % url, params={'action': 'finish'}, timeout=timeout)
         start = time.time()
         print 'Deduplication started...'
-    except requests.exceptions.Timeout:
+    except (Timeout, ConnectionError):
         return 'Training finish failed'
     try:
         while True:
             work = s.get('%s/working/' % url, timeout=timeout)
-            if work.json().get('ready'):
-                end = time.time()
-                break
-            else:
-                time.sleep(3)
-                continue
-    except requests.exceptions.Timeout:
+            try:
+                if work.json().get('ready'):
+                    end = time.time()
+                    break
+                else:
+                    time.sleep(3)
+                    continue
+            except ValueError:
+                print work.content
+                if work.status_code is 504:
+                    time.sleep(3)
+                    continue
+                else:
+                    return 'The app seems to have crashed'
+    except (Timeout, ConnectionError):
         return 'Failed while waiting for results'
     print 'Dedupe Took %s seconds' % (str(end - start))
     return work.json()['result']
 
-def trained_run(url):
+def trained_run(args):
+    url, pile_size = args
     s = requests.Session()
     f = {'input_file': open('csv_example_messy_input.csv', 'rb')}
     r = s.post(url, files=f)
@@ -79,14 +106,28 @@ def trained_run(url):
     print 'Dedupe Took %s seconds' % (str(end - start))
 
 if __name__ == '__main__':
-    import sys
-    count = int(sys.argv[1])
-    pool = Pool(processes=count)
-    args = 'http://dedupe.datamade.us'
+    import argparse
+    parser = argparse.ArgumentParser(
+      formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument('-c', '--count', type=int, 
+        help='Number of concurrent requests',
+        default=1)
+    parser.add_argument('-u', '--url', type=str, 
+        help='Number of concurrent requests',
+        default='http://dedupe.datamade.us')
+    parser.add_argument('-s', '--size', type=int, 
+        help='Number of times to duplicate input file to mimic large file.',
+        default=1)
+    parser.add_argument('-t', '--type', type=str, 
+        help='Number of times to duplicate input file to mimic large file.',
+        default='full', choices=['full', 'trained'])
+    args = parser.parse_args()
+    pool = Pool(processes=args.count)
     args_map = []
-    for i in range(count):
-        args_map.append(args)
-    if sys.argv[2] == 'full': 
+    for i in range(args.count):
+        args_map.append([args.url, args.size])
+    if args.type == 'full': 
         print pool.map(full_run, args_map)
-    elif sys.argv[2] == 'trained':
+    elif args.type == 'trained':
         print pool.map(trained_run, args_map)
