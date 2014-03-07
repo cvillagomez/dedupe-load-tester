@@ -19,10 +19,15 @@ def stack(fname, pile_size):
     return pile
 
 def full_run(args):
-    url, pile_size = args
+    url, pile_size, file_type = args
     s = requests.Session()
-    pile = stack('csv_example_messy_input.csv', pile_size)
-    f = {'input_file': ('test.csv', pile.getvalue())}
+    if file_type != 'csv' and pile_size > 1:
+        return 'Can\'t stack non-csv files'
+    elif file_type == 'csv':
+        pile = stack('csv_example_messy_input.csv', pile_size)
+        f = {'input_file': ('test.csv', pile.getvalue())}
+    else:
+        f = {'input_file': open('csv_example_messy_input.%s' % file_type, 'rb')}
     r = s.post(url, files=f)
     fields = {'Site name': 'on', 'Phone': 'on', 'Address': 'on', 'Zip': 'on'}
     start = time.time()
@@ -120,13 +125,16 @@ if __name__ == '__main__':
         help='Number of times to duplicate input file to mimic large file.',
         default=1)
     parser.add_argument('-t', '--type', type=str, 
-        help='Number of times to duplicate input file to mimic large file.',
+        help='Type of dedupe session. Either trained or full',
         default='full', choices=['full', 'trained'])
+    parser.add_argument('-f', '--file_type', type=str, 
+        help='Type of file to upload for training. xls, xlsx, or csv',
+        default='csv', choices=['csv', 'xls', 'xlsx'])
     args = parser.parse_args()
     pool = Pool(processes=args.count)
     args_map = []
     for i in range(args.count):
-        args_map.append([args.url, args.size])
+        args_map.append([args.url, args.size, args.file_type])
     if args.type == 'full': 
         print pool.map(full_run, args_map)
     elif args.type == 'trained':
