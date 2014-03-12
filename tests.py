@@ -82,10 +82,36 @@ def full_run(args):
     except (Timeout, ConnectionError):
         return 'Failed while waiting for results'
     print 'Dedupe Took %s seconds' % (str(end - start))
+    try:
+        s.get('%s/adjust_threshold/' % url, params={'recall_weight': 8}, timeout=timeout)
+        start = time.time()
+        print 'Adjusting threshold...'
+    except (TimeoutError, ConnectionError):
+        return 'Failed while adjusting threshold'
+    try:
+        while True:
+            work = s.get('%s/working/' % url, timeout=timeout)
+            try:
+                if work.json().get('ready'):
+                    end = time.time()
+                    break
+                else:
+                    time.sleep(3)
+                    continue
+            except ValueError:
+                print work.content
+                if work.status_code is 504:
+                    time.sleep(3)
+                    continue
+                else:
+                    return 'The app seems to have crashed'
+    except (Timeout, ConnectionError):
+        return 'Failed while waiting for adjusted dedupe session'
+    print 'Adjusted recall weight in %s seconds' % (str(end - start))
     return work.json()['result']
 
 def trained_run(args):
-    url, pile_size = args
+    url, pile_size, file_type = args
     s = requests.Session()
     f = {'input_file': open('csv_example_messy_input.csv', 'rb')}
     r = s.post(url, files=f)
@@ -99,6 +125,28 @@ def trained_run(args):
     s.get('%s/mark-pair/' % url, params={'action': 'finish'})
     start = time.time()
     print 'Deduplication started...'
+    while True:
+        work = s.get('%s/working/' % url)
+        if work.json().get('ready'):
+            print work.json()
+            end = time.time()
+            break
+        else:
+            time.sleep(3)
+            continue
+    print 'Adjusting threshold...'
+    s.get('%s/adjust_threshold/' % url, params={'recall_weight': 8})
+    while True:
+        work = s.get('%s/working/' % url)
+        if work.json().get('ready'):
+            print work.json()
+            end = time.time()
+            break
+        else:
+            time.sleep(3)
+            continue
+    print 'Adjusting threshold...again...'
+    s.get('%s/adjust_threshold/' % url, params={'recall_weight': 0.25})
     while True:
         work = s.get('%s/working/' % url)
         if work.json().get('ready'):
